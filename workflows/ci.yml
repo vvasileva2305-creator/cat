@@ -1,54 +1,172 @@
-name: Sample Workflow
-on: [push]  # Событие, при котором запускается workflow
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '6.0.x'
+
 jobs:
+  # 3. Последовательное выполнение (сборка -> тестирование)
   build:
-    runs-on: ubuntu-latest  # Платформа для запуска задачи
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-name: Build and Test Workflow
-
-on: [push, pull_request]
-
-jobs:
-  build:
+    name: Build Application
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '6.0.x'
-      - name: Build
-        run: dotnet build src/YourProject.csproj
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts
+        path: |
+          src/**/bin/Release/
+          src/**/obj/Release/
+        retention-days: 1
 
-name: Parallel Workflow
-
-on: [push]
-
-jobs:
-  build-debug:
+  # Задача тестирования, зависящая от сборки
+  test_sequential:
+    name: Run Tests (Sequential)
     runs-on: ubuntu-latest
+    needs: build
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '6.0.x'
-      - name: Build Debug
-        run: dotnet build src/YourProject.csproj --configuration Debug
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Run tests
+      run: dotnet test --configuration Release --verbosity normal
 
-  build-release:
+  # 4. Параллельное тестирование в различных конфигурациях
+  test_debug:
+    name: Test Debug Configuration
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '6.0.x'
-      - name: Build Release
-        run: dotnet build src/YourProject.csproj --configuration Release
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Run tests in Debug
+      run: dotnet test --configuration Debug --verbosity normal
+
+  test_release:
+    name: Test Release Configuration
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Run tests in Release
+      run: dotnet test --configuration Release --verbosity normal
+
+  # 5. Комбинированный пакет
+  build_for_parallel:
+    name: Build for Parallel Tasks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Upload artifacts for parallel jobs
+      uses: actions/upload-artifact@v4
+      with:
+        name: built-solution
+        path: .
+        retention-days: 1
+
+  # Параллельные задачи после сборки
+  test_parallel:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: build_for_parallel
+    
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: built-solution
+        
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Run all tests
+      run: dotnet test --configuration Release --verbosity detailed
+
+  code_analysis:
+    name: Code Analysis
+    runs-on: ubuntu-latest
+    needs: build_for_parallel
+    
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: built-solution
+        
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Run code analysis
+      run: |
+        dotnet build --configuration Release /p:GenerateDocumentationFile=true /warnaserror
+        echo "Code analysis completed"
+        # Финальная задача, которая выполняется после всех
+  final:
+    name: Final Status
+    runs-on: ubuntu-latest
+    needs: [test_parallel, code_analysis]
+    
+    steps:
+    - name: Pipeline completed
+      run: |
+        echo "Все задачи CI/CD пайплайна успешно завершены!"
+        echo "Сборка: ✓"
+        echo "Тестирование: ✓"
+        echo "Анализ кода: ✓"
