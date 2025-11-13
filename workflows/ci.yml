@@ -1,5 +1,14 @@
-#include <stdio.h>  
-int main() {  
-printf("Hello, World!\n");  
-return 0;  
-}  
+stages: # Определяем этапы пайплайна [1](https://javarush.com/quests/lectures/ru.javarush.java.spring.lecture.level15.lecture05)
+- build
+- test
+variables: MAVEN_OPTS: "-Dmaven.repo.local=/cache/.m2/repository" # Кэшируем локальные зависимости Maven
+build: # Этап сборки
+stage: build
+image: maven:3.8.5-openjdk-11 # Используем Docker-образ с Maven и JDK
+script: - mvn clean compile # Команда для компиляции проекта
+artifacts: paths: - target/ # Передаём артефакты (напр., jar-файлы) на следующие этапы
+test: # Этап тестирования
+stage: test
+image: maven:3.8.5-openjdk-11
+script: - mvn test # Запускаем тесты
+artifacts: reports: junit: target/surefire-reports/TEST-*.xml # Журналируем результаты тестирования
