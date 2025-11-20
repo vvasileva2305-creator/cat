@@ -1,5 +1,4 @@
 name: CI Pipeline
-
 on:
   push:
     branches: [ main, develop ]
@@ -7,8 +6,11 @@ on:
     branches: [ main ]
 
 env:
-  DOTNET_VERSION: '6.0.x'
+  DOTNET_VERSION: '8.0.x'
+  SOLUTION_FILE: 'калькулятор.sln'
+  TEST_PROJECT: 'cat/.github/workflows/калькулятор/калькулятор/obj/калькулятор.csproj'
 
+  
 jobs:
   # 3. Последовательное выполнение (сборка -> тестирование)
   build:
